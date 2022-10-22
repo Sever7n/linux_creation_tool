@@ -6,7 +6,16 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-gtk = {package = "gtk4", version = "0.4.8"}
-reqwest = { version = "0.10"}
-tokio = { version = "0.2", features = ["full"] }
-bytes = "^1.0"
+gtk = {package = "gtk4", version = "0.5.0" }
+reqwest = {version = "0.11", features = ["stream"]}
+tokio = {version = "1", features = ["full"]}
+libudev = "0.3.0"
+sudo = "0.6.0"
+serde = "1.0.145"
+futures-util = "0.3.25"
+indicatif = "0.17.1"
+polkit = "0.15.1"
+polkit-agent = "0.15.1"
+polkit-sys = "0.15.1"
+polkit-agent-sys = "0.15.1"
+dbus = "0.9.6"
