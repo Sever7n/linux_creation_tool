@@ -1,48 +1,42 @@
 use std::collections::HashMap;
-use std::ffi::OsString;
-use libudev::{Context, Device, Enumerator};
+use std::fs::File;
+use std::os::unix::io::FromRawFd;
+use std::time::Duration;
+use dbus::arg::{OwnedFd, RefArg, Variant};
+use dbus::blocking::{Connection, Proxy};
+use dbus_udisks2::{DiskDevice, Disks, UDisks2};
+use libc;
 
-pub fn list_devices() -> HashMap<OsString, OsString>{
+type UDisksOptions = HashMap<&'static str, Variant<Box<dyn RefArg>>>;
 
-    let context = Context::new().unwrap();
+pub fn list_devices() -> Vec<DiskDevice>{
 
-    let mut enumerator = Enumerator::new(&context).unwrap();
+    let udisks = UDisks2::new().unwrap();
+    let devices = Disks::new(&udisks).devices;
+    let mut devices = devices.into_iter()
+        .filter(|d| d.drive.connection_bus == "usb" || d.drive.connection_bus == "sdio")
+        .filter(|d| d.parent.size != 0)
+        .collect::<Vec<_>>();
 
-    let mut map = HashMap::new();
+    devices.sort_by_key(|d| d.drive.id.clone());
 
-    let id_model = OsString::from("ID_MODEL");
-
-    for device in enumerator.scan_devices().unwrap().filter(|p| filter_devices(p)) {
-
-        let name = match device.properties().find(|p| p.name() == &id_model) {
-            Some(p) => p.value().to_os_string(),
-            None => device.sysname().unwrap().to_os_string(),
-        };
-
-        let path = device.devnode().unwrap().as_os_str().to_os_string();
-
-        map.insert(name, path);
-
-    }
-
-    map
+    devices
 
 }
 
-fn filter_devices(dev: &Device) -> bool {
 
-    let empty_os_string = OsString::new();
+pub fn udisks_open(dbus_path: &str) -> Result<File, &str> {
+    let connection = Connection::new_system().unwrap();
 
-    let dev_type = OsString::from("disk");
-    let id_bus = OsString::from("ID_BUS");
-    let bus_ids = [OsString::from("usb"), OsString::from("ata")];
+    let dbus_path = dbus::strings::Path::new(dbus_path).unwrap();
 
-    let is_type = dev.devtype().unwrap_or_else(|| &empty_os_string) == dev_type;
-    let has_bus_id = match dev.properties().find(|p| p.name() == id_bus){
-        Some(p) => bus_ids.contains(&p.value().to_os_string()),
-        None => false,
-    };
+    let proxy =
+        Proxy::new("org.freedesktop.UDisks2", &dbus_path, Duration::new(25, 0), &connection);
 
-    is_type && has_bus_id
+    let mut options = UDisksOptions::new();
+    options.insert("flags", Variant(Box::new(libc::O_SYNC)));
+    let res: (OwnedFd,) =
+        proxy.method_call("org.freedesktop.UDisks2.Block", "OpenDevice", ("rw", options)).unwrap();
 
+    Ok(unsafe { File::from_raw_fd(res.0.into_fd()) })
 }

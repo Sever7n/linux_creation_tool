@@ -1,33 +1,50 @@
-use std::collections::HashMap;
 use std::cmp::min;
-use std::ffi::OsString;
 use std::fs;
-use std::io::{Seek, Write};
+use std::io::{self, Read, Seek, Write};
+use std::io::Result as IoResult;
+use dbus_udisks2::DiskDevice;
 
 use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::Client;
 use futures_util::StreamExt;
-use polkit::ffi::polkit_action_description_get_action_id;
+use serde::{Deserialize, Serialize};
 
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
 use crate::linux::list_devices as list;
+#[cfg(target_os= "linux")]
+use self::linux::udisks_open;
 
 ///# Return
 /// Outputs a hashmap containing the device name as key and the device handle as value
-pub fn list_devices() -> HashMap<OsString, OsString> {
+pub fn list_devices() -> Vec<DiskDevice> {
     list()
 }
 
-/*
+#[derive(Serialize, Deserialize, Debug)]
 pub struct OperatingSystem {
-    name: String,
-    url: String,
+    pub os: Vec<(String, Source)>
 }
-*/
 
-pub async fn download_write_os(client: &Client, url: &str, dev: &str) -> Result<(), String> {
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Source {
+    Url(String),
+    File(String)
+}
+
+pub fn load_config(path: &str) -> IoResult<OperatingSystem> {
+    let mut file = fs::File::open(path)?;
+
+    let mut content = String::new();
+    file.read_to_string(&mut content)?;
+
+    let json = serde_json::from_str(&content)?;
+
+    Ok(json)
+}
+
+pub async fn download_write_os(client: &Client, url: &str, dev: DiskDevice) -> Result<(), String> {
 
     println!("Downloading ...");
 
@@ -45,16 +62,14 @@ pub async fn download_write_os(client: &Client, url: &str, dev: &str) -> Result<
         .progress_chars("-> "));
     //pb.set_message(&format!("Downloading {}", url));
 
+    let mut stream = res.bytes_stream();
 
+    let mut file = udisks_open(&dev.parent.path).unwrap();
 
-    file = fs::OpenOptions::new()
-        .read(true)
-        .write(true)
-        .open(dev)
-        .unwrap();
+    println!("d path: {}", dev.drive.path);
 
-    let file_size = fs::metadata(dev).unwrap().len();
-    file.seek(std::io::SeekFrom::Start(file_size)).unwrap();
+    let file_size = fs::metadata(dev.parent.device).unwrap().len();
+    file.seek(io::SeekFrom::Start(file_size)).unwrap();
     let mut downloaded = file_size;
 
     while let Some(item) = stream.next().await {
@@ -66,6 +81,7 @@ pub async fn download_write_os(client: &Client, url: &str, dev: &str) -> Result<
         pb.set_position(downloaded);
     }
 
+    pb.finish();
     Ok(())
 
 }

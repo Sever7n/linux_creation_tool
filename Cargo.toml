@@ -9,13 +9,12 @@ edition = "2021"
 gtk = {package = "gtk4", version = "0.5.0" }
 reqwest = {version = "0.11", features = ["stream"]}
 tokio = {version = "1", features = ["full"]}
-libudev = "0.3.0"
+libc = "0.2.136"
 sudo = "0.6.0"
-serde = "1.0.145"
+serde = {version = "1.0.145", features = ["derive"]}
+serde_json = "1.0.87"
 futures-util = "0.3.25"
 indicatif = "0.17.1"
-polkit = "0.15.1"
-polkit-agent = "0.15.1"
-polkit-sys = "0.15.1"
-polkit-agent-sys = "0.15.1"
 dbus = "0.9.6"
+dbus-udisks2 = {git = "https://github.com/pop-os/dbus-udisks2"}
+futures = "0.3.25"

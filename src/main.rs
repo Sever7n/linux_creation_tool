@@ -1,22 +1,28 @@
 use gtk::prelude::*;
 use gtk::{Application, ApplicationWindow, Box};
 use reqwest::Client;
-use linux_creation_tool::list_devices;
-use linux_creation_tool::download_write_os;
+use linux_creation_tool::*;
 
 const ARCH_URL: &str = "http://mirror.chaoticum.net/arch/iso/latest/archlinux-x86_64.iso";
 
 #[tokio::main]
 async fn main() -> Result<(), reqwest::Error>{
 
-    let dev = list_devices();
-    
-    println!("{:?}", dev);
+    let _reqwest_client = Client::new();
 
-    match download_write_os(&Client::new(), ARCH_URL, "/dev/sdb").await {
-        Ok(()) => {},
-        Err(e) => eprintln!("{}", e)
+    let mut _dev = list_devices();
+
+    let _os = load_config("");
+
+    let os = OperatingSystem {
+        os: vec![
+            ("file".into(), Source::File("/some_file.iso".into())),
+            ("url".into(), Source::Url("/some_url.iso".into()))
+        ]
     };
+
+    let serialize = serde_json::to_string(&os).unwrap();
+    println!("{}", serialize);
 
     let app = Application::builder()
         .application_id("sev.linux_creation_tool")
