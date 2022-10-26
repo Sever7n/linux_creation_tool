@@ -6,15 +6,13 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-gtk = {package = "gtk4", version = "0.5.0" }
+iced = {version = "0.4.2", features = ["image"]}
 reqwest = {version = "0.11", features = ["stream"]}
 tokio = {version = "1", features = ["full"]}
 libc = "0.2.136"
-sudo = "0.6.0"
 serde = {version = "1.0.145", features = ["derive"]}
 serde_json = "1.0.87"
 futures-util = "0.3.25"
 indicatif = "0.17.1"
 dbus = "0.9.6"
 dbus-udisks2 = {git = "https://github.com/pop-os/dbus-udisks2"}
-futures = "0.3.25"

@@ -7,25 +7,33 @@ use dbus::blocking::{Connection, Proxy};
 use dbus_udisks2::{DiskDevice, Disks, UDisks2};
 use libc;
 
-type UDisksOptions = HashMap<&'static str, Variant<Box<dyn RefArg>>>;
+type UDisksOptions = HashMap<String, Variant<Box<dyn RefArg>>>;
 
-pub fn list_devices() -> Vec<DiskDevice>{
+pub fn list_devices() -> HashMap<String, DiskDevice>{
 
     let udisks = UDisks2::new().unwrap();
     let devices = Disks::new(&udisks).devices;
-    let mut devices = devices.into_iter()
+
+    let mut map = HashMap::new();
+
+    devices.into_iter()
         .filter(|d| d.drive.connection_bus == "usb" || d.drive.connection_bus == "sdio")
         .filter(|d| d.parent.size != 0)
-        .collect::<Vec<_>>();
+        .for_each(|d| {
+            let label = match d.drive.vendor.is_empty() {
+                true => format!("{}", d.drive.model),
+                false => format!("{} {}", d.drive.vendor, d.drive.model)
+            };
 
-    devices.sort_by_key(|d| d.drive.id.clone());
+            map.insert(label, d);
+        });
 
-    devices
+    map
 
 }
 
 
-pub fn udisks_open(dbus_path: &str) -> Result<File, &str> {
+pub fn udisks_open(dbus_path: &String) -> Result<File, String> {
     let connection = Connection::new_system().unwrap();
 
     let dbus_path = dbus::strings::Path::new(dbus_path).unwrap();
@@ -34,7 +42,7 @@ pub fn udisks_open(dbus_path: &str) -> Result<File, &str> {
         Proxy::new("org.freedesktop.UDisks2", &dbus_path, Duration::new(25, 0), &connection);
 
     let mut options = UDisksOptions::new();
-    options.insert("flags", Variant(Box::new(libc::O_SYNC)));
+    options.insert("flags".into(), Variant(Box::new(libc::O_SYNC)));
     let res: (OwnedFd,) =
         proxy.method_call("org.freedesktop.UDisks2.Block", "OpenDevice", ("rw", options)).unwrap();
 
