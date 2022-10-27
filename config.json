@@ -8,7 +8,7 @@
     {
       "name":"Linux Mint",
       "source":{"Url":"https://mirror.bauhuette.fh-aachen.de/linuxmint-cd/stable/21/linuxmint-21-cinnamon-64bit.iso"},
-      "pic":{"File":"pictures/missing.png"}
+      "pic":{"File":"pictures/mint.png"}
     },
     {
       "name":"Fedora",
@@ -23,7 +23,7 @@
     {
       "name":"Endeavor OS",
       "source":{"Url":"https://github.com/endeavouros-team/ISO/releases/download/1-EndeavourOS-ISO-releases-archive/EndeavourOS_Artemis_nova_22_9.iso"},
-      "pic":{"File":"pictures/missing.png"}
+      "pic":{"File":"pictures/endeavor.png"}
     }
   ]
 }

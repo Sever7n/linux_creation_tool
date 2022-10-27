@@ -1,4 +1,4 @@
-#! /usr/bin env bash
+#!/usr/bin/env bash
 #install script
 
 cargo build --release
