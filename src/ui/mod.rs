@@ -1,3 +1,4 @@
+use std::cmp::min;
 use std::collections::HashMap;
 
 use dbus_udisks2::DiskDevice;
@@ -66,7 +67,7 @@ impl Default for Flags {
     fn default() -> Self {
         Self {
             client: Client::new(),
-            config: "demo.json"
+            config: "config.json"
         }
     }
 
@@ -158,7 +159,7 @@ impl Application for App {
 
                 let length = self.os_list.as_ref().unwrap().as_vec().len() - 1;
 
-                self.states.selected_os = (offset * length as f32) as usize;
+                self.states.selected_os = min((offset * length as f32 + 0.5) as usize, length);
 
                 Command::none()
             },
@@ -200,10 +201,10 @@ impl Application for App {
 
             let image = match os.pic.clone() {
                 Source::File(f) => {
-                    Image::new(format!("{}{}", DIRECTORY, f))
+                    Image::new(format!("{}{}", DIRECTORY, f.clone()))
                 },
                 Source::Url(_) => {
-                    Image::new(format!("{}{}", DIRECTORY, "missing.png"))
+                    Image::new(format!("{}{}", DIRECTORY, "pictures/missing.png"))
                 }
             };
 

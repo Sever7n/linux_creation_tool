@@ -21,7 +21,7 @@ use self::linux::udisks_open;
 mod linux;
 pub mod ui;
 
-pub const DIRECTORY: &'static str = "/home/severin/IdeaProjects/linux_creation_tool/";
+pub const DIRECTORY: &'static str = "/etc/linux_creation_tool/";
 
 ///# Return
 /// Outputs a hashmap containing the device name as key and the device handle as value
@@ -95,7 +95,7 @@ pub fn load_config(path: &str) -> IoResult<OperatingSystemList> {
     let mut content = String::new();
     file.read_to_string(&mut content)?;
 
-    let json = serde_json::from_str(&content)?;
+    let json: OperatingSystemList = serde_json::from_str(&content)?;
 
     Ok(json)
 }

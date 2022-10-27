@@ -1,0 +1,29 @@
+{
+  "os": [
+    {
+      "name":"Pop!_OS",
+      "source":{"Url":"https://iso.pop-os.org/22.04/amd64/intel/16/pop-os_22.04_amd64_intel_16.iso"},
+      "pic":{"File":"pictures/pop!_os.png"}
+    },
+    {
+      "name":"Linux Mint",
+      "source":{"Url":"https://mirror.bauhuette.fh-aachen.de/linuxmint-cd/stable/21/linuxmint-21-cinnamon-64bit.iso"},
+      "pic":{"File":"pictures/missing.png"}
+    },
+    {
+      "name":"Fedora",
+      "source":{"Url":"https://download.fedoraproject.org/pub/fedora/linux/releases/36/Workstation/x86_64/iso/Fedora-Workstation-Live-x86_64-36-1.5.iso"},
+      "pic":{"File":"pictures/fedora.png"}
+    },
+    {
+      "name":"Zorin",
+      "source":{"Url":"https://ftp.halifax.rwth-aachen.de/zorinos/16/Zorin-OS-16.2-Core-64-bit.iso"},
+      "pic":{"File":"pictures/zorin.png"}
+    },
+    {
+      "name":"Endeavor OS",
+      "source":{"Url":"https://github.com/endeavouros-team/ISO/releases/download/1-EndeavourOS-ISO-releases-archive/EndeavourOS_Artemis_nova_22_9.iso"},
+      "pic":{"File":"pictures/missing.png"}
+    }
+  ]
+}

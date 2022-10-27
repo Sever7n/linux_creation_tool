@@ -1,4 +1,3 @@
-use std::error::Error;
 use iced::{Application, Settings};
 use iced::window::Icon;
 use reqwest::Client;
@@ -7,23 +6,19 @@ use linux_creation_tool::ui::Flags;
 use image::io::Reader as ImageReader;
 use crate::ui::App;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>>{
+fn main() {
 
     let client = Client::new();
 
-    let img = ImageReader::open(format!("{}{}", DIRECTORY, "icon.png"))?.decode()?;
-
+    let img = ImageReader::open(format!("{}{}", DIRECTORY, "pictures/icon.png")).unwrap().decode().unwrap();
     let img = img.as_rgba8().unwrap().as_raw();
 
     let mut settings = Settings::default();
-    settings.flags = Flags::new(client, "demo.json");
+    settings.flags = Flags::new(client, format!("{}{}", DIRECTORY, "config.json").into());
     settings.window.size = (512, 362);
     settings.exit_on_close_request = true;
-    settings.window.icon = Some(Icon::from_rgba(img.clone(), 32, 32)?);
+    settings.window.icon = Some(Icon::from_rgba(img.clone(), 256, 256).unwrap());
 
     App::run(settings).unwrap();
-
-    Ok(())
 
 }
