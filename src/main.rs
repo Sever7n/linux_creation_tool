@@ -14,7 +14,7 @@ fn main() {
     let img = img.as_rgba8().unwrap().as_raw();
 
     let mut settings = Settings::default();
-    settings.flags = Flags::new(client, "/etc/linux_creation_tool/");
+    settings.flags = Flags::new(client, "/etc/linux_creation_tool/config.json");
     settings.window.size = (512, 362);
     settings.exit_on_close_request = true;
     settings.window.icon = Some(Icon::from_rgba(img.clone(), 256, 256).unwrap());
