@@ -1,14 +1,15 @@
 use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::{self, File};
+use std::hash::Hash;
 use std::io::{self, Read, Seek, Write};
 use std::io::Result as IoResult;
 
 use dbus_udisks2::DiskDevice;
 
-use indicatif::{ProgressBar, ProgressStyle};
-use reqwest::Client;
-use futures_util::StreamExt;
+use iced_native::subscription;
+
+use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_os = "linux")]
@@ -99,52 +100,115 @@ pub fn load_config(path: &str) -> IoResult<OperatingSystemList> {
     Ok(json)
 }
 
-pub async fn write_os(client: Client, os: OperatingSystem, dev: DiskDevice) -> IoResult<()> {
-
-    match os.source {
-        Source::File(path) => read_write_iso(path, dev).await?,
-        Source::Url(url) => download_write_iso(client, url, dev).await?
-    }
-
-    Ok(())
+pub fn file<I: 'static + Hash + Copy + Send + Sync, T: ToString>(
+    id: I,
+    url: T,
+    dev: DiskDevice,
+    client: Client
+) -> iced::Subscription<(I, Progress)> {
+    subscription::unfold(id, State::Ready(url.to_string(), dev, client),move |state| {
+        download(id, state)
+    })
 }
 
-async fn download_write_iso(client: Client, url: String, dev: DiskDevice) -> IoResult<()> {
-
-    let res = client.get(&url).send().await.unwrap();
-
-    let total_size = res.content_length().ok_or(format!("Failed to get content length from: {}", &url)).unwrap();
-
-    let pb = ProgressBar::new(total_size);
-    pb.set_style(ProgressStyle::default_bar()
-        .template("{msg}\n{spinner:.green} [{elapsed_precise}] [{wide_bar:.white/blue}] {bytes}/{total_bytes} ({bytes_per_sec}, {eta})")
-        .unwrap()
-        .progress_chars("-> "));
-    pb.set_message(format!("Downloading from: {}", url));
-
-    let mut stream = res.bytes_stream();
-    let mut file = udisks_open(&dev.parent.path).unwrap();
-
-    println!("d path: {}", dev.drive.path);
-
-    let file_size = fs::metadata(&dev.parent.device).unwrap().len();
-    file.seek(io::SeekFrom::Start(file_size)).unwrap();
-    let mut downloaded = file_size;
-
-    while let Some(item) = stream.next().await {
-        let chunk = item.unwrap();
-        file.write_all(&chunk).unwrap();
-        let new = min(downloaded + (chunk.len() as u64), total_size);
-        downloaded = new;
-        pb.set_position(downloaded);
-    }
-
-    pb.finish();
-    Ok(())
-
+#[derive(Debug, Hash, Clone)]
+pub struct Download<I> {
+    id: I,
+    url: String,
 }
 
-async fn read_write_iso(path: String, dev: DiskDevice) -> IoResult<()> {
+async fn download<I: Copy>(
+    id: I,
+    state: State,
+) -> (Option<(I, Progress)>, State) {
+    match state {
+        State::Ready(url, dev, client) => {
+            let response = client.get(&url).send().await;
+
+            match response {
+                Ok(response) => {
+                    if let Some(total) = response.content_length() {
+                        let mut file = match udisks_open(&dev.parent.path) {
+                            Ok(f) => f,
+                            Err(_) => return (Some((id, Progress::Errored)), State::Finished)
+                        };
+
+                        let file_size = fs::metadata(&dev.parent.device).unwrap().len();
+                        file.seek(io::SeekFrom::Start(file_size)).unwrap();
+
+                        (
+                            Some((id, Progress::Started)),
+                            State::Downloading {
+                                response,
+                                file,
+                                total,
+                                downloaded: 0,
+                            },
+                        )
+                    } else {
+                        (Some((id, Progress::Errored)), State::Finished)
+                    }
+                }
+                Err(_) => (Some((id, Progress::Errored)), State::Finished),
+            }
+        }
+        State::Downloading {
+            mut response,
+            mut file,
+            total,
+            downloaded,
+        } => {
+
+            match response.chunk().await {
+                Ok(None) => (Some((id, Progress::Finished)), State::Finished),
+                Ok(Some(chunk)) => {
+                    if let Ok(_) = file.write_all(&chunk) {
+                        let new = min(downloaded + (chunk.len() as u64), total);
+
+                        let percentage = (new as f32 / total as f32) * 100.0;
+
+                        (
+                            Some((id, Progress::Advanced(percentage))),
+                            State::Downloading {
+                                response,
+                                total,
+                                downloaded: new,
+                                file
+                            }
+                        )
+                    } else {
+                        (Some((id, Progress::Errored)), State::Finished)
+                    }
+                },
+                Err(_) => (Some((id, Progress::Errored)), State::Finished)
+            }
+        },
+        State::Finished => {
+            iced::futures::future::pending().await
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub enum Progress {
+    Started,
+    Advanced(f32),
+    Finished,
+    Errored,
+}
+
+pub enum State {
+    Ready(String, DiskDevice, Client),
+    Downloading {
+        response: Response,
+        file: File,
+        total: u64,
+        downloaded: u64,
+    },
+    Finished,
+}
+
+pub async fn read_write_iso(path: String, dev: DiskDevice) -> IoResult<()> {
 
     let mut content = fs::read(&path)?;
 

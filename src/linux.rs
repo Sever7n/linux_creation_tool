@@ -33,7 +33,7 @@ pub fn list_devices() -> HashMap<String, DiskDevice>{
 }
 
 
-pub fn udisks_open(dbus_path: &String) -> Result<File, String> {
+pub fn udisks_open(dbus_path: &str) -> Result<File, String> {
     let connection = Connection::new_system().unwrap();
 
     let dbus_path = dbus::strings::Path::new(dbus_path).unwrap();

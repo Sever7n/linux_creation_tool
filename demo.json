@@ -1,13 +1,13 @@
 {
   "os": [
     {
-      "name":"Linux",
-      "source":{"Url":"http://"},
+      "name":"Arch Linux",
+      "source":{"Url":"http://mirror.chaoticum.net/arch/iso/latest/archlinux-x86_64.iso"},
       "pic":{"File":"test.png"}
     },
     {
-      "name":"Linux1",
-      "source":{"Url":"http://"},
+      "name":"Gentoo",
+      "source":{"File":"/home/severin/Isos/install-amd64-minimal-20220626T170536Z.iso"},
       "pic":{"File":"test.png"}
     },
     {
