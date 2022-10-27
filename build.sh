@@ -2,7 +2,7 @@
 #install script
 
 cargo build --release
-cp target/release/linux_creation_tool /usr/bin/
+sudo cp target/release/linux_creation_tool /usr/bin/
 
 mkdir /etc/linux_creation_tool/pictures
 cp pictures/*.png /etc/linux_creation_tool/pictures/
