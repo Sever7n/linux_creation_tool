@@ -190,7 +190,11 @@ impl Application for App {
             Some(ls) => ls
         };
 
-        let label = os_list.get(self.states.selected_os).unwrap().name();
+        let binding = "".to_string();
+        let label = match os_list.get(self.states.selected_os) {
+            Some(os) => os.name(),
+            _ => &binding
+        };
 
         let text  = Text::new(label)
             .horizontal_alignment(Horizontal::Center)
