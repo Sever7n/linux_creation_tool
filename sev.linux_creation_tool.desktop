@@ -1,14 +1,12 @@
 [Desktop Entry]
 Type=Application
-Version=3.0
 Name=Linux Creation Tool
 GenericName=USB Writer
 X-GNOME-Fullname=Linux Creation Tool
 Comment=Downloads and writes ISO to a device
-Icon=sev.linux_creation_tool
+Icon=linux_creation_tool
 Category=System;
 Keywords="USB;Flash;Writer;Linux;Creation;Tool"
 MimeType=application/x-cd-image;application/x-raw-disk-image;
 Terminal=false
-StartupNotify=true
-exec=linux_creation_tool
+Exec=linux_creation_tool

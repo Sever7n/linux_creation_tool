@@ -8,5 +8,5 @@ sudo mkdir -p /etc/linux_creation_tool/pictures
 sudo cp pictures/*.png /etc/linux_creation_tool/pictures/
 sudo cp config.json /etc/linux_creation_tool/
 
-sudo cp pictures/icon.png /usr/share/pixmaps/sev.linux_creation_tool.png
-sudo cp sev.linux_creation_tool.desktop /usr/share/applications/
+sudo cp pictures/icon.png /usr/share/pixmaps/linux_creation_tool.png
+sudo cp linux_creation_tool.desktop /usr/share/applications/
