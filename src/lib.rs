@@ -90,8 +90,7 @@ pub enum Source {
 }
 
 pub fn load_config(path: &str) -> IoResult<OperatingSystemList> {
-    println!("{}{}", DIRECTORY, path);
-    let mut file = File::open(format!("{}{}", DIRECTORY, path))?;
+    let mut file = File::open(path)?;
 
     let mut content = String::new();
     file.read_to_string(&mut content)?;
