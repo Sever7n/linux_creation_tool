@@ -89,7 +89,10 @@ impl Application for App {
             client: flags.client,
             os_list: match load_config(flags.config) {
                 Ok(c) => Some(c),
-                Err(_) => None
+                Err(e) => {
+                    eprintln!("{}", e);
+                    None
+                }
             },
             disks: dev,
             disk_labels: labels,
