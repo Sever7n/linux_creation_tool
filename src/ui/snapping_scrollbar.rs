@@ -24,7 +24,7 @@ impl<'a, Message, Renderer: iced_native::Renderer> SnappingScrollable<'a, Messag
     pub fn new(state: &'a mut State) -> Self {
         SnappingScrollable {
             state,
-            height: Length::Shrink
+            height: Length::Shrink,
             max_height: u32::MAX,
             scrollbar_width: 10,
             scrollbar_margin: 0,
