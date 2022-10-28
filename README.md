@@ -14,7 +14,7 @@ The Source of the ISO can be a download from a url or a local file.
 - make && sudo make install
 
 ## Notes
-- Downloading Preview Images is not yet supported.
+- Downloading preview images is not yet supported.
 
 ## Config
 ### Linux
