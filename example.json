@@ -1,0 +1,14 @@
+{
+  "os": [
+    {
+      "name":"Download/Write ISO",
+      "source":{"Url":"https://download.url.iso"},
+      "pic":{"File":"pictures/pop!_os.png"}
+    },
+    {
+      "name":"Read/Write ISO",
+      "source":{"File":"https://mirror.bauhuette.fh-aachen.de/linuxmint-cd/stable/21/linuxmint-21-cinnamon-64bit.iso"},
+      "pic":{"File":"pictures/mint.png"}
+    }
+  ]
+}
