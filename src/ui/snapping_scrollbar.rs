@@ -812,6 +812,7 @@ impl State {
                 .max(0.0)
                 .min((content_bounds.height - bounds.height) as f32),
         );
+        self.update_selected_region(&bounds, &content_bounds);
     }
 
     /// Scrolls the [`Scrollable`] to a relative amount.
@@ -825,6 +826,7 @@ impl State {
         content_bounds: Rectangle,
     ) {
         self.snap_to(percentage);
+        self.update_selected_region(&bounds, &content_bounds);
         self.unsnap(bounds, content_bounds);
     }
 
@@ -872,21 +874,19 @@ impl State {
             return;
         }
 
-        let offset = match self.offset {
-            Offset::Absolute(x) => {
-                print!("Absolute ");
-                x / (content_bounds.height - bounds.height)
-            },
-            Offset::Relative(x) => {
-                print!("Relative ");
-                x
-            }
-        };
-
-        self.selected_region = min((offset * self.snapping_regions as f32 + self.snapping_offset) as usize, self.snapping_regions);
+        self.update_selected_region(bounds, content_bounds);
         let new_offset = self.selected_region as f32 / self.snapping_regions as f32;
 
         self.snap_to(new_offset);
+    }
+
+    fn update_selected_region(&mut self, bounds: &Rectangle, content_bounds: &Rectangle) {
+        let offset = match self.offset {
+            Offset::Absolute(x) => x / (content_bounds.height - bounds.height),
+            Offset::Relative(x) => x
+        };
+
+        self.selected_region = min((offset * self.snapping_regions as f32 + self.snapping_offset) as usize, self.snapping_regions);
     }
 
     pub fn selected_region(&self) -> usize {
