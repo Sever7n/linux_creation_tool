@@ -1,13 +1,15 @@
-use std::cmp::min;
+mod snapping_scrollbar;
+
 use std::collections::HashMap;
 
 use dbus_udisks2::DiskDevice;
 use iced::widget::{pick_list, PickList, Text};
-use iced::{Application, Button, button::State as ButtonState, Column, Command, ContentFit, Element, executor, Image, Length, Padding, Row, Scrollable, scrollable, Space, Subscription};
+use iced::{Application, Button, button::State as ButtonState, Column, Command, ContentFit, Element, executor, Image, Length, Padding, Row, Space, Subscription};
 use iced::alignment::Horizontal;
 use iced_native::widget::ProgressBar;
 use reqwest::Client;
 use crate::{DIRECTORY, file, list_devices, load_config, OperatingSystemList, Progress, read_write_iso, Source};
+use crate::ui::snapping_scrollbar::SnappingScrollable;
 
 pub struct App {
     client: Client,
@@ -37,11 +39,9 @@ pub enum DownloadMessage {
 #[derive(Default, Debug)]
 struct AppStates {
     pick_list: pick_list::State<String>,
-    scroll_state: scrollable::State,
-    scrolling: bool,
+    scroll_state: snapping_scrollbar::State,
     scroll_offset: f32,
     button_state: ButtonState,
-    selected_os: usize,
     selected_device: Option<String>,
     error_message: Vec<String>,
 }
@@ -109,7 +109,6 @@ impl Application for App {
     }
 
     fn update(&mut self, message: Self::Message) -> Command<Self::Message> {
-        self.states.scrolling = true;
         return match message {
             Message::StartWriting => {
                 self.states.error_message = vec![];
@@ -122,7 +121,7 @@ impl Application for App {
                     Some(ls) => ls
                 };
 
-                let os = match os_list.get(self.states.selected_os) {
+                let os = match os_list.get(self.states.scroll_state.selected_region()) {
                     None => unreachable!(),
                     Some(os) => {os}
                 };
@@ -157,12 +156,7 @@ impl Application for App {
                 Command::none()
             },
             Message::Scrolled(offset) => {
-                self.states.scrolling = true;
                 self.states.scroll_offset = offset;
-
-                let length = self.os_list.as_ref().unwrap().as_vec().len() - 1;
-
-                self.states.selected_os = min((offset * length as f32 + 0.5) as usize, length);
 
                 Command::none()
             },
@@ -194,7 +188,7 @@ impl Application for App {
         };
 
         let binding = "".to_string();
-        let label = match os_list.get(self.states.selected_os) {
+        let label = match os_list.get(self.states.scroll_state.selected_region()) {
             Some(os) => os.name(),
             _ => &binding
         };
@@ -208,7 +202,7 @@ impl Application for App {
 
             let image = match os.pic.clone() {
                 Source::File(f) => {
-                    Image::new(format!("{}{}", DIRECTORY, f.clone()))
+                    Image::new(format!("{}{}", DIRECTORY, f))
                 },
                 Source::Url(_) => {
                     Image::new(format!("{}{}", DIRECTORY, "pictures/missing.png"))
@@ -219,12 +213,14 @@ impl Application for App {
 
         }
 
-        let scrolled_image = Scrollable::new(&mut self.states.scroll_state)
+        let scrolled_image = SnappingScrollable::new(&mut self.states.scroll_state)
             .width(Length::FillPortion(75))
             .height(Length::FillPortion(50))
             .on_scroll(move |offset| {
                 Message::Scrolled(offset)
             })
+            .with_snapping_regions(os_list.as_vec().len())
+            .with_snapping_offset(0.5)
             .push(images);
 
         let dev_list = PickList::new(
