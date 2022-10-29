@@ -1,7 +1,7 @@
 # Linux Creation Tool
 
 The Linux Creation Tool is a utility for downloading and writing ISO files, written in Rust.
-The Source of the ISO can be a download from a url or a local file.
+The Source of the ISO can be a download from an url or a local file.
 
 ## Build Dependencies
 - cargo
