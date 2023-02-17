@@ -11,6 +11,7 @@ setup: compile pictures/endeavor.png pictures/fedora.png pictures/icon.png pictu
 	sudo cp pictures/icon.png /usr/share/pixmaps/
 	sudo cp linux_creation_tool.desktop /usr/share/applications/
 	sudo cp target/release/linux_creation_tool /usr/bin
+	sudo cp config.json /etc/linux_creation_tool/
 
 update:
 	cargo update
