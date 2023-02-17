@@ -2,8 +2,8 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::hash::Hash;
-use std::io::{self, Read, Seek, Write};
 use std::io::Result as IoResult;
+use std::io::{self, Read, Seek, Write};
 
 use dbus_udisks2::DiskDevice;
 
@@ -13,15 +13,15 @@ use reqwest::{Client, Response};
 use serde::{Deserialize, Serialize};
 
 #[cfg(target_os = "linux")]
-use crate::linux::list_devices as list;
-#[cfg(target_os= "linux")]
 use self::linux::udisks_open;
+#[cfg(target_os = "linux")]
+use crate::linux::list_devices as list;
 
 #[cfg(target_os = "linux")]
 mod linux;
 pub mod ui;
 
-pub const DIRECTORY: &'static str = "/etc/linux_creation_tool/";
+pub const DIRECTORY: &str = "/etc/linux_creation_tool/";
 
 ///# Return
 /// Outputs a hashmap containing the device name as key and the device handle as value
@@ -33,17 +33,12 @@ pub fn list_devices() -> HashMap<String, DiskDevice> {
 pub struct OperatingSystem {
     name: String,
     source: Source,
-    pic: Source
+    pic: Source,
 }
 
 impl OperatingSystem {
-
-    pub fn new(name: String, source: Source, pic: Source) -> Self{
-        Self {
-            name,
-            source,
-            pic
-        }
+    pub fn new(name: String, source: Source, pic: Source) -> Self {
+        Self { name, source, pic }
     }
 
     pub fn name(&self) -> &String {
@@ -57,36 +52,31 @@ impl OperatingSystem {
     pub fn pic(&self) -> &Source {
         &self.pic
     }
-
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OperatingSystemList {
-    os: Vec<OperatingSystem>
+    os: Vec<OperatingSystem>,
 }
 
 impl OperatingSystemList {
-
     pub fn get(&self, i: usize) -> Option<&OperatingSystem> {
         self.os.get(i)
     }
 
     pub fn empty() -> Self {
-        Self {
-            os: vec![]
-        }
+        Self { os: vec![] }
     }
 
     pub fn as_vec(&self) -> &Vec<OperatingSystem> {
         &self.os
     }
-
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Source {
     Url(String),
-    File(String)
+    File(String),
 }
 
 pub fn load_config(path: &str) -> IoResult<OperatingSystemList> {
@@ -104,11 +94,13 @@ pub fn file<I: 'static + Hash + Copy + Send + Sync, T: ToString>(
     id: I,
     url: T,
     dev: DiskDevice,
-    client: Client
+    client: Client,
 ) -> iced::Subscription<(I, Progress)> {
-    subscription::unfold(id, State::Ready(url.to_string(), dev, client),move |state| {
-        download(id, state)
-    })
+    subscription::unfold(
+        id,
+        State::Ready(url.to_string(), Box::new(dev), client),
+        move |state| download(id, state),
+    )
 }
 
 #[derive(Debug, Hash, Clone)]
@@ -117,10 +109,7 @@ pub struct Download<I> {
     url: String,
 }
 
-async fn download<I: Copy>(
-    id: I,
-    state: State,
-) -> (Option<(I, Progress)>, State) {
+async fn download<I: Copy>(id: I, state: State) -> (Option<(I, Progress)>, State) {
     match state {
         State::Ready(url, dev, client) => {
             let response = client.get(&url).send().await;
@@ -130,7 +119,7 @@ async fn download<I: Copy>(
                     if let Some(total) = response.content_length() {
                         let mut file = match udisks_open(&dev.parent.path) {
                             Ok(f) => f,
-                            Err(_) => return (Some((id, Progress::Errored)), State::Finished)
+                            Err(_) => return (Some((id, Progress::Errored)), State::Finished),
                         };
 
                         let file_size = fs::metadata(&dev.parent.device).unwrap().len();
@@ -157,35 +146,30 @@ async fn download<I: Copy>(
             mut file,
             total,
             downloaded,
-        } => {
+        } => match response.chunk().await {
+            Ok(None) => (Some((id, Progress::Finished)), State::Finished),
+            Ok(Some(chunk)) => {
+                if file.write_all(&chunk).is_ok() {
+                    let new = min(downloaded + (chunk.len() as u64), total);
 
-            match response.chunk().await {
-                Ok(None) => (Some((id, Progress::Finished)), State::Finished),
-                Ok(Some(chunk)) => {
-                    if let Ok(_) = file.write_all(&chunk) {
-                        let new = min(downloaded + (chunk.len() as u64), total);
+                    let percentage = (new as f32 / total as f32) * 100.0;
 
-                        let percentage = (new as f32 / total as f32) * 100.0;
-
-                        (
-                            Some((id, Progress::Advanced(percentage))),
-                            State::Downloading {
-                                response,
-                                total,
-                                downloaded: new,
-                                file
-                            }
-                        )
-                    } else {
-                        (Some((id, Progress::Errored)), State::Finished)
-                    }
-                },
-                Err(_) => (Some((id, Progress::Errored)), State::Finished)
+                    (
+                        Some((id, Progress::Advanced(percentage))),
+                        State::Downloading {
+                            response,
+                            total,
+                            downloaded: new,
+                            file,
+                        },
+                    )
+                } else {
+                    (Some((id, Progress::Errored)), State::Finished)
+                }
             }
+            Err(_) => (Some((id, Progress::Errored)), State::Finished),
         },
-        State::Finished => {
-            iced::futures::future::pending().await
-        }
+        State::Finished => iced::futures::future::pending().await,
     }
 }
 
@@ -198,7 +182,7 @@ pub enum Progress {
 }
 
 pub enum State {
-    Ready(String, DiskDevice, Client),
+    Ready(String, Box<DiskDevice>, Client),
     Downloading {
         response: Response,
         file: File,
@@ -209,16 +193,14 @@ pub enum State {
 }
 
 pub async fn read_write_iso(path: String, dev: DiskDevice) -> IoResult<()> {
-
-    let mut content = fs::read(&path)?;
+    let content = fs::read(path)?;
 
     let mut file = udisks_open(&dev.parent.path).unwrap();
 
     let file_size = fs::metadata(&dev.parent.device).unwrap().len();
     file.seek(io::SeekFrom::Start(file_size)).unwrap();
 
-    file.write(&mut content)?;
+    file.write_all(&content)?;
 
     Ok(())
-
 }
