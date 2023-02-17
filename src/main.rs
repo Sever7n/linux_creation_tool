@@ -22,7 +22,7 @@ fn main() {
         exit_on_close_request: true,
         window: WindowSettings {
             size: (512, 362),
-            icon: Some(Icon::from_rgba(img.clone(), 256, 256).unwrap()),
+            icon: Some(Icon::from_rgba(img.clone(), 1024, 1024).unwrap()),
             ..Default::default()
         },
         ..Default::default()
