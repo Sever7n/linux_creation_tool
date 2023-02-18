@@ -1,5 +1,6 @@
 use dbus::arg::{OwnedFd, RefArg, Variant};
 use dbus::blocking::{Connection, Proxy};
+use dbus::Error;
 use dbus_udisks2::{DiskDevice, Disks, UDisks2};
 use std::collections::HashMap;
 use std::fs::File;
@@ -8,8 +9,8 @@ use std::time::Duration;
 
 type UDisksOptions = HashMap<String, Variant<Box<dyn RefArg>>>;
 
-pub fn list_devices() -> HashMap<String, DiskDevice> {
-    let udisks = UDisks2::new().unwrap();
+pub fn list_devices() -> Result<HashMap<String, DiskDevice>, Error> {
+    let udisks = UDisks2::new()?;
     let devices = Disks::new(&udisks).devices;
 
     let mut map = HashMap::new();
@@ -27,13 +28,16 @@ pub fn list_devices() -> HashMap<String, DiskDevice> {
             map.insert(label, d);
         });
 
-    map
+    Ok(map)
 }
 
-pub fn udisks_open(dbus_path: &str) -> Result<File, String> {
-    let connection = Connection::new_system().unwrap();
+pub fn udisks_open(dbus_path: &str) -> Result<File, Error> {
+    let connection = Connection::new_system()?;
 
-    let dbus_path = dbus::strings::Path::new(dbus_path).unwrap();
+    let dbus_path = match dbus::strings::Path::new(dbus_path) {
+        Ok(p) => p,
+        Err(e) => return Err(Error::new_failed(&e)),
+    };
 
     let proxy = Proxy::new(
         "org.freedesktop.UDisks2",
@@ -44,13 +48,11 @@ pub fn udisks_open(dbus_path: &str) -> Result<File, String> {
 
     let mut options = UDisksOptions::new();
     options.insert("flags".into(), Variant(Box::new(libc::O_SYNC)));
-    let res: (OwnedFd,) = proxy
-        .method_call(
-            "org.freedesktop.UDisks2.Block",
-            "OpenDevice",
-            ("rw", options),
-        )
-        .unwrap();
+    let res: (OwnedFd,) = proxy.method_call(
+        "org.freedesktop.UDisks2.Block",
+        "OpenDevice",
+        ("rw", options),
+    )?;
 
     Ok(unsafe { File::from_raw_fd(res.0.into_fd()) })
 }

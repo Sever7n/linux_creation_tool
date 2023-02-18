@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::hash::Hash;
+use std::io::Error as IoError;
 use std::io::Result as IoResult;
 use std::io::{self, Read, Seek, Write};
 
@@ -25,7 +26,8 @@ pub const DIRECTORY: &str = "/etc/linux_creation_tool/";
 
 ///# Return
 /// Outputs a hashmap containing the device name as key and the device handle as value
-pub fn list_devices() -> HashMap<String, DiskDevice> {
+#[cfg(target_os = "linux")]
+pub fn list_devices() -> Result<HashMap<String, DiskDevice>, dbus::Error> {
     list()
 }
 
@@ -122,8 +124,14 @@ async fn download<I: Copy>(id: I, state: State) -> (Option<(I, Progress)>, State
                             Err(_) => return (Some((id, Progress::Errored)), State::Finished),
                         };
 
-                        let file_size = fs::metadata(&dev.parent.device).unwrap().len();
-                        file.seek(io::SeekFrom::Start(file_size)).unwrap();
+                        let file_size = match fs::metadata(&dev.parent.device) {
+                            Ok(x) => x.len(),
+                            Err(_) => return (Some((id, Progress::Errored)), State::Finished),
+                        };
+
+                        if file.seek(io::SeekFrom::Start(file_size)).is_err() {
+                            return (Some((id, Progress::Errored)), State::Finished);
+                        };
 
                         (
                             Some((id, Progress::Started)),
@@ -195,10 +203,13 @@ pub enum State {
 pub async fn read_write_iso(path: String, dev: DiskDevice) -> IoResult<()> {
     let content = fs::read(path)?;
 
-    let mut file = udisks_open(&dev.parent.path).unwrap();
+    let mut file = match udisks_open(&dev.parent.path) {
+        Ok(res) => res,
+        Err(e) => return Err(IoError::new(io::ErrorKind::Other, e)),
+    };
 
-    let file_size = fs::metadata(&dev.parent.device).unwrap().len();
-    file.seek(io::SeekFrom::Start(file_size)).unwrap();
+    let file_size = fs::metadata(&dev.parent.device)?.len();
+    file.seek(io::SeekFrom::Start(file_size))?;
 
     file.write_all(&content)?;
 

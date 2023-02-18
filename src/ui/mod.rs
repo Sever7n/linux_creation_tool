@@ -8,11 +8,12 @@ use crate::{
     DIRECTORY,
 };
 use dbus_udisks2::DiskDevice;
-use iced::alignment::Horizontal;
-use iced::widget::{pick_list, PickList, Text};
+use iced::Theme;
 use iced::{
-    button::State as ButtonState, executor, Application, Button, Column, Command, ContentFit,
-    Element, Image, Length, Padding, Row, Space, Subscription,
+    alignment::Horizontal,
+    executor,
+    widget::{Button, Column, Image, PickList, Row, Space, Text},
+    Application, Command, ContentFit, Element, Length, Padding, Subscription,
 };
 use iced_native::widget::ProgressBar;
 use reqwest::Client;
@@ -31,7 +32,7 @@ pub struct App {
 pub enum Message {
     StartWriting,
     SelectDevice(String),
-    Scrolled(f32),
+    Scrolled(usize),
     Download(DownloadMessage),
     None,
 }
@@ -44,12 +45,9 @@ pub enum DownloadMessage {
 
 #[derive(Default, Debug)]
 struct AppStates {
-    pick_list: pick_list::State<String>,
-    scroll_state: snapping_scrollbar::State,
-    scroll_offset: f32,
-    button_state: ButtonState,
-    selected_device: Option<String>,
     error_message: Vec<String>,
+    selected_region: usize,
+    selected_device: Option<String>,
 }
 
 pub struct Flags {
@@ -76,9 +74,10 @@ impl Application for App {
     type Executor = executor::Default;
     type Message = Message;
     type Flags = Flags;
+    type Theme = Theme;
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
-        let dev = list_devices();
+        let dev = list_devices().unwrap();
         let mut labels = Vec::new();
 
         dev.iter().for_each(|(l, _)| labels.push(l.clone()));
@@ -121,7 +120,7 @@ impl Application for App {
                     Some(ls) => ls,
                 };
 
-                let os = match os_list.get(self.states.scroll_state.selected_region()) {
+                let os = match os_list.get(self.states.selected_region) {
                     None => unreachable!(),
                     Some(os) => os,
                 };
@@ -158,11 +157,10 @@ impl Application for App {
             }
             Message::SelectDevice(label) => {
                 self.states.selected_device = Some(label);
-                println!("{:?}", self.states.selected_device);
                 Command::none()
             }
-            Message::Scrolled(offset) => {
-                self.states.scroll_offset = offset;
+            Message::Scrolled(region) => {
+                self.states.selected_region = region;
 
                 Command::none()
             }
@@ -182,21 +180,21 @@ impl Application for App {
         Subscription::batch(self.downloads.iter().map(Download::subscription))
     }
 
-    fn view(&mut self) -> Element<'_, Self::Message> {
+    fn view(&self) -> Element<'_, Self::Message> {
         let os_list = match self.os_list.clone() {
             None => {
-                self.states
-                    .error_message
-                    .push("Failed to load OS List".into());
+                // self.states
+                //     .error_message
+                //     .push("Failed to load OS List".into());
                 OperatingSystemList::empty()
             }
             Some(ls) => ls,
         };
 
-        let binding = "".to_string();
-        let label = match os_list.get(self.states.scroll_state.selected_region()) {
-            Some(os) => os.name(),
-            _ => &binding,
+        let os = os_list.get(self.states.selected_region);
+        let label = match os {
+            Some(os) => os.name().clone(),
+            _ => "".to_string(),
         };
 
         let text = Text::new(label)
@@ -213,27 +211,20 @@ impl Application for App {
             images = images.push(image.content_fit(ContentFit::Contain));
         }
 
-        let scrolled_image = SnappingScrollable::new(&mut self.states.scroll_state)
-            .width(Length::FillPortion(75))
-            .height(Length::FillPortion(50))
-            .on_scroll(Message::Scrolled)
-            .with_snapping_regions(os_list.as_vec().len())
-            .with_snapping_offset(0.5)
-            .push(images);
+        let scrolled_image =
+            SnappingScrollable::new(images, (0, os_list.as_vec().len()), (0.5, 0.5))
+                .height(Length::FillPortion(50))
+                .on_scroll(|region| Message::Scrolled(region.1));
 
         let dev_list = PickList::new(
-            &mut self.states.pick_list,
             &self.disk_labels,
             self.states.selected_device.clone(),
             Message::SelectDevice,
         )
         .placeholder("Choose a device ...");
 
-        let start_button = Button::new(
-            &mut self.states.button_state,
-            Text::new("Write ISO to drive..."),
-        )
-        .on_press(Message::StartWriting);
+        let start_button =
+            Button::new(Text::new("Write ISO to drive...")).on_press(Message::StartWriting);
 
         let mut row = Row::new().push(dev_list);
 
@@ -254,7 +245,7 @@ impl Application for App {
         let mut col = Column::new()
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(Padding::new(25))
+            .padding(Padding::new(25.0))
             .push(text)
             .push(scrolled_image)
             .push(row);
