@@ -1,5 +1,4 @@
 use std::cmp::min;
-use std::collections::HashMap;
 use std::fs::{self, File};
 use std::hash::Hash;
 use std::io::Error as IoError;
@@ -16,20 +15,13 @@ use serde::{Deserialize, Serialize};
 #[cfg(target_os = "linux")]
 use self::linux::udisks_open;
 #[cfg(target_os = "linux")]
-use crate::linux::list_devices as list;
+pub use crate::linux::list_devices;
 
 #[cfg(target_os = "linux")]
 mod linux;
 pub mod ui;
 
 pub const DIRECTORY: &str = "/etc/linux_creation_tool/";
-
-///# Return
-/// Outputs a hashmap containing the device name as key and the device handle as value
-#[cfg(target_os = "linux")]
-pub fn list_devices() -> Result<HashMap<String, DiskDevice>, dbus::Error> {
-    list()
-}
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct OperatingSystem {

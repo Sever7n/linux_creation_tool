@@ -472,7 +472,7 @@ pub fn update<Message: Clone>(
             Event::Mouse(mouse::Event::WheelScrolled { delta }) => {
                 let delta = match delta {
                     mouse::ScrollDelta::Lines { x, y } => {
-                        if state.keyboard_modifiers.shift() {
+                        if !state.keyboard_modifiers.shift() {
                             (x, y)
                         } else {
                             (y, x)

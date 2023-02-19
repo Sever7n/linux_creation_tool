@@ -234,7 +234,7 @@ impl Application for App {
         };
 
         match state {
-            State::Downloading { progress } => {
+            State::Progressing { progress } => {
                 row = row.push(ProgressBar::new(0.0..=100.0, *progress));
             }
             _ => {
@@ -289,7 +289,7 @@ struct Download {
 #[derive(Debug)]
 enum State {
     Idle,
-    Downloading { progress: f32 },
+    Progressing { progress: f32 },
     Finished,
     Errored,
 }
@@ -308,14 +308,14 @@ impl Download {
     pub fn start(&mut self) {
         match self.state {
             State::Idle | State::Finished { .. } | State::Errored { .. } => {
-                self.state = State::Downloading { progress: 0.0 };
+                self.state = State::Progressing { progress: 0.0 };
             }
             _ => {}
         }
     }
 
     pub fn progress(&mut self, new_progress: Progress) {
-        if let State::Downloading { progress } = &mut self.state {
+        if let State::Progressing { progress } = &mut self.state {
             match new_progress {
                 Progress::Started => {
                     *progress = 0.0;
@@ -335,7 +335,7 @@ impl Download {
 
     pub fn subscription(&self) -> Subscription<Message> {
         match self.state {
-            State::Downloading { .. } => {
+            State::Progressing { .. } => {
                 file(self.id, &self.url, self.dev.clone(), self.client.clone())
                     .map(|p| Message::Download(DownloadMessage::DownloadProgressed(p)))
             }
