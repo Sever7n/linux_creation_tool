@@ -2,14 +2,21 @@ mod snapping_scrollbar;
 
 use std::collections::HashMap;
 
+use crate::ui::snapping_scrollbar::SnappingScrollable;
+use crate::{
+    file, list_devices, load_config, read_write_iso, OperatingSystemList, Progress, Source,
+    DIRECTORY,
+};
 use dbus_udisks2::DiskDevice;
-use iced::widget::{pick_list, PickList, Text};
-use iced::{Application, Button, button::State as ButtonState, Column, Command, ContentFit, Element, executor, Image, Length, Padding, Row, Space, Subscription};
-use iced::alignment::Horizontal;
+use iced::Theme;
+use iced::{
+    alignment::Horizontal,
+    executor,
+    widget::{Button, Column, Image, PickList, Row, Space, Text},
+    Application, Command, ContentFit, Element, Length, Padding, Subscription,
+};
 use iced_native::widget::ProgressBar;
 use reqwest::Client;
-use crate::{DIRECTORY, file, list_devices, load_config, OperatingSystemList, Progress, read_write_iso, Source};
-use crate::ui::snapping_scrollbar::SnappingScrollable;
 
 pub struct App {
     client: Client,
@@ -18,16 +25,16 @@ pub struct App {
     disk_labels: Vec<String>,
     downloads: Option<Download>,
     last_id: usize,
-    states: AppStates
+    states: AppStates,
 }
 
 #[derive(Debug, Clone)]
 pub enum Message {
     StartWriting,
     SelectDevice(String),
-    Scrolled(f32),
+    Scrolled(usize),
     Download(DownloadMessage),
-    None
+    None,
 }
 
 #[derive(Debug, Clone)]
@@ -38,49 +45,39 @@ pub enum DownloadMessage {
 
 #[derive(Default, Debug)]
 struct AppStates {
-    pick_list: pick_list::State<String>,
-    scroll_state: snapping_scrollbar::State,
-    scroll_offset: f32,
-    button_state: ButtonState,
-    selected_device: Option<String>,
     error_message: Vec<String>,
+    selected_region: usize,
+    selected_device: Option<String>,
 }
 
 pub struct Flags {
     client: Client,
-    config: &'static str
+    config: &'static str,
 }
 
 impl Flags {
-
-    pub fn new(client: Client, config: &'static str) -> Self{
-        Flags {
-            client,
-            config
-        }
+    pub fn new(client: Client, config: &'static str) -> Self {
+        Flags { client, config }
     }
-
 }
 
 impl Default for Flags {
-
     fn default() -> Self {
         Self {
             client: Client::new(),
-            config: "config.json"
+            config: "config.json",
         }
     }
-
 }
 
 impl Application for App {
     type Executor = executor::Default;
     type Message = Message;
     type Flags = Flags;
+    type Theme = Theme;
 
     fn new(flags: Self::Flags) -> (Self, Command<Self::Message>) {
-
-        let dev = list_devices();
+        let dev = list_devices().unwrap();
         let mut labels = Vec::new();
 
         dev.iter().for_each(|(l, _)| labels.push(l.clone()));
@@ -98,7 +95,7 @@ impl Application for App {
             disk_labels: labels,
             downloads: None,
             last_id: 0,
-            states: AppStates::default()
+            states: AppStates::default(),
         };
 
         (app, Command::none())
@@ -115,61 +112,67 @@ impl Application for App {
 
                 let os_list = match &self.os_list {
                     None => {
-                        self.states.error_message.push("Failed to get the ISO list".into());
+                        self.states
+                            .error_message
+                            .push("Failed to get the ISO list".into());
                         return Command::none();
-                    },
-                    Some(ls) => ls
+                    }
+                    Some(ls) => ls,
                 };
 
-                let os = match os_list.get(self.states.scroll_state.selected_region()) {
+                let os = match os_list.get(self.states.selected_region) {
                     None => unreachable!(),
-                    Some(os) => {os}
+                    Some(os) => os,
                 };
 
-                let device = match self.disks.get(&self.states.selected_device.clone().unwrap_or("".into())) {
+                let device = match self
+                    .disks
+                    .get(&self.states.selected_device.clone().unwrap_or("".into()))
+                {
                     None => {
-                        self.states.error_message.push("Failed to get device".into());
+                        self.states
+                            .error_message
+                            .push("Failed to get device".into());
                         return Command::none();
-                    },
-                    Some(dev) => dev
+                    }
+                    Some(dev) => dev,
                 };
 
                 return match os.source.clone() {
                     Source::Url(url) => {
-                        self.last_id = self.last_id + 1;
+                        self.last_id += 1;
 
-                        let mut download = Download::new(self.last_id, url, device.clone(), self.client.clone());
+                        let mut download =
+                            Download::new(self.last_id, url, device.clone(), self.client.clone());
                         download.start();
 
                         self.downloads = Some(download);
 
                         Command::none()
-                    },
+                    }
                     Source::File(path) => {
-                        Command::perform(read_write_iso(path, device.clone()), |_| {Message::None})
+                        Command::perform(read_write_iso(path, device.clone()), |_| Message::None)
                     }
                 };
-            },
+            }
             Message::SelectDevice(label) => {
                 self.states.selected_device = Some(label);
-                println!("{:?}", self.states.selected_device);
                 Command::none()
-            },
-            Message::Scrolled(offset) => {
-                self.states.scroll_offset = offset;
+            }
+            Message::Scrolled(region) => {
+                self.states.selected_region = region;
 
                 Command::none()
-            },
+            }
             Message::Download(DownloadMessage::DownloadProgressed((id, progress))) => {
-                if let Some(download) =
-                self.downloads.iter_mut().find(|download| download.id == id)
+                if let Some(download) = self.downloads.iter_mut().find(|download| download.id == id)
                 {
                     download.progress(progress);
                 }
 
                 Command::none()
-            },
-            _ => {Command::none()}
+            }
+            _ => Command::none(),
         };
     }
 
@@ -177,85 +180,72 @@ impl Application for App {
         Subscription::batch(self.downloads.iter().map(Download::subscription))
     }
 
-    fn view(&mut self) -> Element<'_, Self::Message> {
-
+    fn view(&self) -> Element<'_, Self::Message> {
         let os_list = match self.os_list.clone() {
             None => {
-                self.states.error_message.push("Failed to load OS List".into());
+                // self.states
+                //     .error_message
+                //     .push("Failed to load OS List".into());
                 OperatingSystemList::empty()
-            },
-            Some(ls) => ls
+            }
+            Some(ls) => ls,
         };
 
-        let binding = "".to_string();
-        let label = match os_list.get(self.states.scroll_state.selected_region()) {
-            Some(os) => os.name(),
-            _ => &binding
+        let os = os_list.get(self.states.selected_region);
+        let label = match os {
+            Some(os) => os.name().clone(),
+            _ => "".to_string(),
         };
 
-        let text  = Text::new(label)
+        let text = Text::new(label)
             .horizontal_alignment(Horizontal::Center)
             .width(Length::FillPortion(100));
 
         let mut images = Column::new();
         for os in os_list.as_vec() {
-
             let image = match os.pic.clone() {
-                Source::File(f) => {
-                    Image::new(format!("{}{}", DIRECTORY, f))
-                },
-                Source::Url(_) => {
-                    Image::new(format!("{}{}", DIRECTORY, "pictures/missing.png"))
-                }
+                Source::File(f) => Image::new(format!("{}{}", DIRECTORY, f)),
+                Source::Url(_) => Image::new(format!("{}{}", DIRECTORY, "pictures/missing.png")),
             };
 
             images = images.push(image.content_fit(ContentFit::Contain));
-
         }
 
-        let scrolled_image = SnappingScrollable::new(&mut self.states.scroll_state)
-            .width(Length::FillPortion(75))
-            .height(Length::FillPortion(50))
-            .on_scroll(move |offset| {
-                Message::Scrolled(offset)
-            })
-            .with_snapping_regions(os_list.as_vec().len())
-            .with_snapping_offset(0.5)
-            .push(images);
+        let scrolled_image =
+            SnappingScrollable::new(images, (0, os_list.as_vec().len()), (0.5, 0.5))
+                .height(Length::FillPortion(50))
+                .on_scroll(|region| Message::Scrolled(region.1));
 
         let dev_list = PickList::new(
-            &mut self.states.pick_list,
             &self.disk_labels,
             self.states.selected_device.clone(),
-            |s| {
-                Message::SelectDevice(s)
-            }
-        ).placeholder("Choose a device ...");
+            Message::SelectDevice,
+        )
+        .placeholder("Choose a device ...");
 
-        let start_button = Button::new(&mut self.states.button_state, Text::new("Write ISO to drive..."))
-            .on_press(Message::StartWriting);
+        let start_button =
+            Button::new(Text::new("Write ISO to drive...")).on_press(Message::StartWriting);
 
         let mut row = Row::new().push(dev_list);
 
         let state = match &self.downloads {
             None => &State::Idle,
-            Some(d) => d.state()
+            Some(d) => d.state(),
         };
 
         match state {
-            State::Downloading {progress} => {
+            State::Progressing { progress } => {
                 row = row.push(ProgressBar::new(0.0..=100.0, *progress));
-            },
+            }
             _ => {
-                row = row.push(Space::with_width(Length::Fill))
-                    .push(start_button);
+                row = row.push(Space::with_width(Length::Fill)).push(start_button);
             }
         }
 
         let mut col = Column::new()
             .width(Length::Fill)
             .height(Length::Fill)
-            .padding(Padding::new(25))
+            .padding(Padding::new(25.0))
             .push(text)
             .push(scrolled_image)
             .push(row);
@@ -271,15 +261,14 @@ impl Application for App {
         }
 
         col.into()
-
     }
 }
 
 #[derive(Debug)]
-pub enum  DownloadState {
+pub enum DownloadState {
     None,
     Downloading(f32),
-    Reading
+    Reading,
 }
 
 impl Default for DownloadState {
@@ -294,13 +283,13 @@ struct Download {
     dev: DiskDevice,
     url: String,
     state: State,
-    client: Client
+    client: Client,
 }
 
 #[derive(Debug)]
 enum State {
     Idle,
-    Downloading { progress: f32 },
+    Progressing { progress: f32 },
     Finished,
     Errored,
 }
@@ -312,24 +301,22 @@ impl Download {
             url,
             dev,
             state: State::Idle,
-            client
+            client,
         }
     }
 
     pub fn start(&mut self) {
         match self.state {
-            State::Idle
-            | State::Finished { .. }
-            | State::Errored { .. } => {
-                self.state = State::Downloading { progress: 0.0 };
+            State::Idle | State::Finished { .. } | State::Errored { .. } => {
+                self.state = State::Progressing { progress: 0.0 };
             }
             _ => {}
         }
     }
 
     pub fn progress(&mut self, new_progress: Progress) {
-        match &mut self.state {
-            State::Downloading { progress } => match new_progress {
+        if let State::Progressing { progress } = &mut self.state {
+            match new_progress {
                 Progress::Started => {
                     *progress = 0.0;
                 }
@@ -342,15 +329,14 @@ impl Download {
                 Progress::Errored => {
                     self.state = State::Errored;
                 }
-            },
-            _ => {}
+            }
         }
     }
 
     pub fn subscription(&self) -> Subscription<Message> {
         match self.state {
-            State::Downloading { .. } => {
-               file(self.id, &self.url, self.dev.clone(), self.client.clone())
+            State::Progressing { .. } => {
+                file(self.id, &self.url, self.dev.clone(), self.client.clone())
                     .map(|p| Message::Download(DownloadMessage::DownloadProgressed(p)))
             }
             _ => Subscription::none(),
@@ -360,5 +346,4 @@ impl Download {
     pub fn state(&self) -> &State {
         &self.state
     }
-
 }
