@@ -4,8 +4,7 @@ use std::collections::HashMap;
 
 use crate::ui::snapping_scrollbar::SnappingScrollable;
 use crate::{
-    file, list_devices, load_config, read_write_iso, OperatingSystemList, Progress, Source,
-    DIRECTORY,
+    download, list_devices, load_config, read, OperatingSystemList, Progress, Source, DIRECTORY,
 };
 use dbus_udisks2::DiskDevice;
 use iced::Theme;
@@ -16,6 +15,7 @@ use iced::{
     Application, Command, ContentFit, Element, Length, Padding, Subscription,
 };
 use iced_native::widget::ProgressBar;
+use image::io::Reader as ImageReader;
 use reqwest::Client;
 
 pub struct App {
@@ -24,8 +24,10 @@ pub struct App {
     disks: HashMap<String, DiskDevice>,
     disk_labels: Vec<String>,
     downloads: Option<Download>,
+    reads: Option<Read>,
     last_id: usize,
     states: AppStates,
+    images: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +36,7 @@ pub enum Message {
     SelectDevice(String),
     Scrolled(usize),
     Download(DownloadMessage),
+    Read(DownloadMessage),
     None,
 }
 
@@ -82,20 +85,46 @@ impl Application for App {
 
         dev.iter().for_each(|(l, _)| labels.push(l.clone()));
 
+        let (os_list, images) = match load_config(flags.config) {
+            Ok(c) => {
+                let len = c.as_vec().len();
+                let mut images = Vec::with_capacity(len);
+                c.as_vec().iter().for_each(|os| {
+                    images.push(match os.pic() {
+                        Source::Url(_) => format!("{}{}", DIRECTORY, "pictures/missing.png"),
+                        Source::File(path) => {
+                            let path = format!("{}{}", DIRECTORY, &path);
+                            match ImageReader::open(&path) {
+                                Ok(i) => match i.decode() {
+                                    Ok(_) => path,
+                                    Err(_) => format!("{}{}", DIRECTORY, "pictures/missing.png"),
+                                },
+                                Err(_) => format!("{}{}", DIRECTORY, "pictures/missing.png"),
+                            }
+                        }
+                    })
+                });
+                (Some(c), images)
+            }
+            Err(e) => {
+                eprintln!("{e}");
+                (
+                    None,
+                    vec![format!("{}{}", DIRECTORY, "pictures/missing.png")],
+                )
+            }
+        };
+
         let app = Self {
             client: flags.client,
-            os_list: match load_config(flags.config) {
-                Ok(c) => Some(c),
-                Err(e) => {
-                    eprintln!("{}", e);
-                    None
-                }
-            },
+            os_list,
             disks: dev,
             disk_labels: labels,
             downloads: None,
+            reads: None,
             last_id: 0,
             states: AppStates::default(),
+            images,
         };
 
         (app, Command::none())
@@ -138,10 +167,9 @@ impl Application for App {
                     Some(dev) => dev,
                 };
 
+                self.last_id += 1;
                 return match os.source.clone() {
                     Source::Url(url) => {
-                        self.last_id += 1;
-
                         let mut download =
                             Download::new(self.last_id, url, device.clone(), self.client.clone());
                         download.start();
@@ -151,7 +179,12 @@ impl Application for App {
                         Command::none()
                     }
                     Source::File(path) => {
-                        Command::perform(read_write_iso(path, device.clone()), |_| Message::None)
+                        let mut read = Read::new(self.last_id, path, device.clone());
+                        read.start();
+
+                        self.reads = Some(read);
+
+                        Command::none()
                     }
                 };
             }
@@ -172,12 +205,28 @@ impl Application for App {
 
                 Command::none()
             }
+            Message::Read(DownloadMessage::DownloadProgressed((id, progress))) => {
+                if let Some(read) = self.reads.iter_mut().find(|read| read.id == id) {
+                    read.progress(progress);
+                }
+
+                Command::none()
+            }
             _ => Command::none(),
         };
     }
 
     fn subscription(&self) -> Subscription<Message> {
-        Subscription::batch(self.downloads.iter().map(Download::subscription))
+        let mut subs: Vec<Subscription<Message>> = vec![];
+
+        if let Some(download) = &self.downloads {
+            subs.push(download.subscription());
+        }
+        if let Some(read) = &self.reads {
+            subs.push(read.subscription());
+        }
+
+        Subscription::batch(subs)
     }
 
     fn view(&self) -> Element<'_, Self::Message> {
@@ -202,12 +251,8 @@ impl Application for App {
             .width(Length::FillPortion(100));
 
         let mut images = Column::new();
-        for os in os_list.as_vec() {
-            let image = match os.pic.clone() {
-                Source::File(f) => Image::new(format!("{}{}", DIRECTORY, f)),
-                Source::Url(_) => Image::new(format!("{}{}", DIRECTORY, "pictures/missing.png")),
-            };
-
+        for image in &self.images {
+            let image = Image::new(image);
             images = images.push(image.content_fit(ContentFit::Contain));
         }
 
@@ -238,7 +283,17 @@ impl Application for App {
                 row = row.push(ProgressBar::new(0.0..=100.0, *progress));
             }
             _ => {
-                row = row.push(Space::with_width(Length::Fill)).push(start_button);
+                let state = match &self.reads {
+                    None => &State::Idle,
+                    Some(d) => d.state(),
+                };
+
+                match state {
+                    State::Progressing { progress } => {
+                        row = row.push(ProgressBar::new(0.0..=100.0, *progress))
+                    }
+                    _ => row = row.push(Space::with_width(Length::Fill)).push(start_button),
+                }
             }
         }
 
@@ -265,15 +320,61 @@ impl Application for App {
 }
 
 #[derive(Debug)]
-pub enum DownloadState {
-    None,
-    Downloading(f32),
-    Reading,
+enum State {
+    Idle,
+    Progressing { progress: f32 },
+    Finished,
+    Errored,
 }
 
-impl Default for DownloadState {
-    fn default() -> Self {
-        Self::None
+#[derive(Debug)]
+struct Read {
+    id: usize,
+    dev: DiskDevice,
+    path: String,
+    state: State,
+}
+
+impl Read {
+    pub fn new(id: usize, path: String, dev: DiskDevice) -> Self {
+        Read {
+            id,
+            dev,
+            path,
+            state: State::Idle,
+        }
+    }
+
+    pub fn start(&mut self) {
+        match self.state {
+            State::Idle | State::Finished { .. } | State::Errored { .. } => {
+                self.state = State::Progressing { progress: 0.0 };
+            }
+            _ => {}
+        }
+    }
+
+    pub fn progress(&mut self, new_progress: Progress) {
+        if let State::Progressing { progress } = &mut self.state {
+            match new_progress {
+                Progress::Started => *progress = 0.0,
+                Progress::Advanced(percentage) => *progress = percentage,
+                Progress::Finished => self.state = State::Finished,
+                Progress::Errored => self.state = State::Errored,
+            }
+        }
+    }
+
+    pub fn subscription(&self) -> Subscription<Message> {
+        match self.state {
+            State::Progressing { .. } => read::file(self.id, &self.path, self.dev.clone())
+                .map(|p| Message::Read(DownloadMessage::DownloadProgressed(p))),
+            _ => Subscription::none(),
+        }
+    }
+
+    pub fn state(&self) -> &State {
+        &self.state
     }
 }
 
@@ -284,14 +385,6 @@ struct Download {
     url: String,
     state: State,
     client: Client,
-}
-
-#[derive(Debug)]
-enum State {
-    Idle,
-    Progressing { progress: f32 },
-    Finished,
-    Errored,
 }
 
 impl Download {
@@ -317,18 +410,10 @@ impl Download {
     pub fn progress(&mut self, new_progress: Progress) {
         if let State::Progressing { progress } = &mut self.state {
             match new_progress {
-                Progress::Started => {
-                    *progress = 0.0;
-                }
-                Progress::Advanced(percentage) => {
-                    *progress = percentage;
-                }
-                Progress::Finished => {
-                    self.state = State::Finished;
-                }
-                Progress::Errored => {
-                    self.state = State::Errored;
-                }
+                Progress::Started => *progress = 0.0,
+                Progress::Advanced(percentage) => *progress = percentage,
+                Progress::Finished => self.state = State::Finished,
+                Progress::Errored => self.state = State::Errored,
             }
         }
     }
@@ -336,7 +421,7 @@ impl Download {
     pub fn subscription(&self) -> Subscription<Message> {
         match self.state {
             State::Progressing { .. } => {
-                file(self.id, &self.url, self.dev.clone(), self.client.clone())
+                download::file(self.id, &self.url, self.dev.clone(), self.client.clone())
                     .map(|p| Message::Download(DownloadMessage::DownloadProgressed(p)))
             }
             _ => Subscription::none(),
